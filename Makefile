@@ -50,14 +50,19 @@ xdg-shell-protocol.h:
 
 config.h:
 	cp config.def.h $@
+check: dwl
+	$(CC) tests/policy.c $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o tests/policy
+	$(TEST_RUNNER) ./tests/policy
+
 clean:
-	rm -f dwl *.o *-protocol.h
+	rm -f dwl tests/policy *.o *-protocol.h
 
 dist: clean
 	mkdir -p dwl-$(VERSION)
 	cp -R LICENSE* Makefile CHANGELOG.md README.md client.h config.def.h \
 		config.mk protocols dwl.1 dwl.c ime.h util.h dwl.desktop \
 		dwl-$(VERSION)
+	cp -R VARBS.md scripts tests dwl-$(VERSION)
 	tar -caf dwl-$(VERSION).tar.gz dwl-$(VERSION)
 	rm -rf dwl-$(VERSION)
 

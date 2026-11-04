@@ -54,9 +54,11 @@ dkms.conf
 # debug information files
 *.dwo
 
+# Local configuration and generated build files
 dwl
-*.o
 *-protocol.c
 *-protocol.h
 .ccls-cache
 config.h
+/tests/policy
+/work/

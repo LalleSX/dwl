@@ -1,4 +1,8 @@
-# Victors's build of dwl
+# Victor's build of dwl
+
+Personal VARBS defaults and setup: **[VARBS.md](VARBS.md)**. This fork is
+`0.10-dev`, built against **wlroots-0.20**, with XWayland enabled by default.
+Start with that guide; the upstream reference follows.
 
 Join us on our [Discord server]  
 Or Matrix: [#dwl-official:matrix.org]  
@@ -53,7 +57,8 @@ version of wlroots (*you probably do*), use a [release] or a [0.x branch]. If
 you want to use the unstable development `main` branch, you need to use the git
 version of [wlroots].
 
-To enable XWayland, you should uncomment its flags in `config.mk`.
+This fork enables XWayland in `config.mk`; use `make XWAYLAND= XLIBS=`
+for a Wayland-only build.
 
 ## Configuration
 

@@ -239,6 +239,8 @@ typedef struct {
 	const Layout *lt;
 	enum wl_output_transform rr;
 	int x, y;
+	int width, height;
+	int adaptive_sync;
 } MonitorRule;
 
 typedef struct {
@@ -272,6 +274,7 @@ static void arrangelayer(Monitor *m, struct wl_list *list,
 		struct wlr_box *usable_area, int exclusive);
 static void arrangelayers(Monitor *m);
 static void axisnotify(struct wl_listener *listener, void *data);
+static struct wlr_output_mode *bestmode(struct wlr_output *output, int width, int height);
 static void buttonpress(struct wl_listener *listener, void *data);
 static void capturerequest(struct wl_listener *listener, void *data);
 static void chvt(const Arg *arg);
@@ -308,6 +311,7 @@ static void destroynotify(struct wl_listener *listener, void *data);
 static void destroypointerconstraint(struct wl_listener *listener, void *data);
 static void destroysessionlock(struct wl_listener *listener, void *data);
 static void destroykeyboardgroup(struct wl_listener *listener, void *data);
+static void cyclelayout(const Arg *arg);
 static Monitor *dirtomon(enum wlr_direction dir);
 static void focusclient(Client *c, LayerSurface *l, int lift);
 static void focusmon(const Arg *arg);
@@ -332,6 +336,7 @@ static char **monoff(struct wlr_output *wlr_output);
 static void motionnotify(uint32_t time, struct wlr_input_device *device, double sx,
 		double sy, double sx_unaccel, double sy_unaccel);
 static void motionrelative(struct wl_listener *listener, void *data);
+static void movestack(const Arg *arg);
 static void moveresize(const Arg *arg);
 static void outputmgrapply(struct wl_listener *listener, void *data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1 *config, int test);
@@ -720,6 +725,18 @@ axisnotify(struct wl_listener *listener, void *data)
 	wlr_seat_pointer_notify_axis(seat,
 			event->time_msec, event->orientation, event->delta,
 			event->delta_discrete, event->source, event->relative_direction);
+}
+
+struct wlr_output_mode *
+bestmode(struct wlr_output *output, int width, int height)
+{
+	struct wlr_output_mode *mode, *best = NULL;
+
+	wl_list_for_each(mode, &output->modes, link)
+		if (mode->width == width && mode->height == height
+				&& (!best || mode->refresh > best->refresh))
+			best = mode;
+	return best ? best : wlr_output_preferred_mode(output);
 }
 
 void
@@ -1203,6 +1220,8 @@ createmon(struct wl_listener *listener, void *data)
 	 * monitor) becomes available. */
 	struct wlr_output *wlr_output = data;
 	const MonitorRule *r;
+	struct wlr_output_mode *mode = NULL, *preferred;
+	int adaptive_sync = 0, committed;
 	size_t i;
 	struct wlr_output_state state;
 	Monitor *m;
@@ -1228,16 +1247,14 @@ createmon(struct wl_listener *listener, void *data)
 			m->lt[0] = r->lt;
 			m->lt[1] = &layouts[LENGTH(layouts) > 1 && r->lt != &layouts[1]];
 			strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, LENGTH(m->ltsymbol));
+			mode = bestmode(wlr_output, r->width, r->height);
+			adaptive_sync = r->adaptive_sync && wlr_output->adaptive_sync_supported;
 			wlr_output_state_set_scale(&state, r->scale);
 			wlr_output_state_set_transform(&state, r->rr);
 			break;
 		}
 	}
 
-	/* The mode is a tuple of (width, height, refresh rate), and each
-	 * monitor supports only a specific set of modes. We just pick the
-	 * monitor's preferred mode; a more sophisticated compositor would let
-	 * the user configure it. */
 	/* Set up event listeners */
 	LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
 	LISTEN(&wlr_output->events.destroy, &m->destroy, cleanupmon);
@@ -1246,10 +1263,25 @@ createmon(struct wl_listener *listener, void *data)
 	/* Some monitors disconnect when they are turned off and reconnect shortly
 	 * after, so keep outputs that were turned off disabled. */
 	if (!monoff(wlr_output)) {
-		wlr_output_state_set_mode(&state, wlr_output_preferred_mode(wlr_output));
+		if (mode)
+			wlr_output_state_set_mode(&state, mode);
+		wlr_output_state_set_adaptive_sync_enabled(&state, adaptive_sync);
 		wlr_output_state_set_enabled(&state, 1);
 	}
-	wlr_output_commit_state(wlr_output, &state);
+	committed = wlr_output_commit_state(wlr_output, &state);
+	if (!committed && adaptive_sync) {
+		wlr_log(WLR_ERROR, "%s: retrying output without adaptive sync", wlr_output->name);
+		wlr_output_state_set_adaptive_sync_enabled(&state, 0);
+		committed = wlr_output_commit_state(wlr_output, &state);
+	}
+	preferred = wlr_output_preferred_mode(wlr_output);
+	if (!committed && preferred && preferred != mode) {
+		wlr_log(WLR_ERROR, "%s: retrying output with preferred mode", wlr_output->name);
+		wlr_output_state_set_mode(&state, preferred);
+		committed = wlr_output_commit_state(wlr_output, &state);
+	}
+	if (!committed)
+		wlr_log(WLR_ERROR, "%s: could not initialize output", wlr_output->name);
 	wlr_output_state_finish(&state);
 
 	wl_list_insert(&mons, &m->link);
@@ -1557,6 +1589,20 @@ destroykeyboardgroup(struct wl_listener *listener, void *data)
 	wl_list_remove(&group->destroy.link);
 	wlr_keyboard_group_destroy(group->wlr_group);
 	free(group);
+}
+
+void
+cyclelayout(const Arg *arg)
+{
+	size_t i;
+
+	if (!selmon)
+		return;
+	for (i = 0; i < LENGTH(layouts); i++)
+		if (selmon->lt[selmon->sellt] == &layouts[i]) {
+			setlayout(&(Arg){.v = &layouts[(i + 1) % LENGTH(layouts)]});
+			return;
+		}
 }
 
 Monitor *
@@ -2196,6 +2242,33 @@ motionrelative(struct wl_listener *listener, void *data)
 	 * the cursor around without any input. */
 	motionnotify(event->time_msec, &event->pointer->base, event->delta_x, event->delta_y,
 			event->unaccel_dx, event->unaccel_dy);
+}
+
+void
+movestack(const Arg *arg)
+{
+	Client *c, *sel;
+	struct wl_list *link;
+	int wrapped = 0;
+
+	if (!selmon || !(sel = focustop(selmon)) || sel->isfloating
+			|| sel->isfullscreen || !selmon->lt[selmon->sellt]->arrange)
+		return;
+	for (link = arg->i > 0 ? sel->link.next : sel->link.prev;
+			link != &sel->link; link = arg->i > 0 ? link->next : link->prev) {
+		if (link == &clients) {
+			wrapped = 1;
+			continue;
+		}
+		c = wl_container_of(link, c, link);
+		if (!VISIBLEON(c, selmon) || c->isfloating || c->isfullscreen)
+			continue;
+		wl_list_remove(&sel->link);
+		wl_list_insert((arg->i > 0) != wrapped ? &c->link : c->link.prev, &sel->link);
+		/* Keep the focus stack intact; only change the tiling order. */
+		arrange(selmon);
+		return;
+	}
 }
 
 void
