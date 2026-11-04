@@ -1,4 +1,4 @@
-# dwl - dwm for Wayland
+# Victors's build of dwl
 
 Join us on our [Discord server]  
 Or Matrix: [#dwl-official:matrix.org]  
