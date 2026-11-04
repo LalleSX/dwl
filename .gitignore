@@ -55,8 +55,10 @@ dkms.conf
 *.dwo
 
 # Local configuration and generated build files
-/config.h
-/dwl
-/*-protocol.h
+dwl
+*-protocol.c
+*-protocol.h
+.ccls-cache
+config.h
 /tests/policy
 /work/
