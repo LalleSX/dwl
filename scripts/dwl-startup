@@ -1,0 +1,36 @@
+#!/bin/sh
+# Run with: dwl -s 'exec /absolute/path/to/scripts/dwl-startup'
+# For the original stdin-driven somebar (without its IPC patch).
+bar=${DWL_BAR-somebar}
+notify=${DWL_NOTIFY-mako}
+barpid=
+notifypid=
+# Preserve status before the shell redirects asynchronous stdin to /dev/null.
+exec 3<&0
+
+cleanup() {
+	trap - 0 HUP INT TERM
+	[ -z "$barpid" ] || kill "$barpid" 2>/dev/null
+	[ -z "$notifypid" ] || kill "$notifypid" 2>/dev/null
+	wait
+}
+trap cleanup 0
+trap 'exit 0' HUP INT TERM
+
+if [ -n "$notify" ] && command -v "$notify" >/dev/null 2>&1; then
+	"$notify" </dev/null 3<&- >&2 &
+	notifypid=$!
+fi
+
+if [ -n "$bar" ] && command -v "$bar" >/dev/null 2>&1; then
+	# Use the saved descriptor, not the asynchronous job's stdin.
+	"$bar" <&3 3<&- >&2 &
+	barpid=$!
+	wait "$barpid"
+	barpid=
+fi
+
+# Drain status even when the bar is missing or has exited.
+cat <&3 3<&- >/dev/null &
+barpid=$!
+wait "$barpid"
