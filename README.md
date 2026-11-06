@@ -33,6 +33,23 @@ is unstable and changes frequently. PRs requiring functionality from the git
 version of `wlroots` should target this branch.
 
 ### Building dwl
+
+This fork targets wlroots 0.20 and enables XWayland. On Arch Linux, install the
+build dependencies and the default terminal and launcher with:
+
+```sh
+sudo pacman -S --needed base-devel wlroots0.20 wayland-protocols libxcb xcb-util-wm xorg-xwayland foot wmenu gtk3 xdg-utils
+make
+```
+
+Run `./dwl` from a terminal in an existing Wayland session to try it in a
+nested window. Use **Win+W** for your default browser, **Win+Enter** for
+your account's login shell in foot, **Alt+P** for wmenu, and
+**Alt+Shift+Q** to exit. The default keyboard layout is Danish.
+
+To install the executable under `/usr/local/bin` and expose the session to
+Plasma Login Manager, run `sudo make install DATADIR=/usr/share` after building.
+
 dwl has the following dependencies:
 - libinput
 - wayland
@@ -53,7 +70,7 @@ version of wlroots (*you probably do*), use a [release] or a [0.x branch]. If
 you want to use the unstable development `main` branch, you need to use the git
 version of [wlroots].
 
-To enable XWayland, you should uncomment its flags in `config.mk`.
+The XWayland build flags are set in `config.mk`.
 
 ## Configuration
 

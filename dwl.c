@@ -1980,8 +1980,6 @@ mapnotify(struct wl_listener *listener, void *data)
 	}
 
 	/* Initialize client geometry with room for border */
-	client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
-			WLR_EDGE_RIGHT);
 	c->geom.width += 2 * c->bw;
 	c->geom.height += 2 * c->bw;
 	if (client_is_x11(c)) {
@@ -2021,8 +2019,11 @@ mapnotify(struct wl_listener *listener, void *data)
 unset_fullscreen:
 	m = c->mon ? c->mon : xytomon(c->geom.x, c->geom.y);
 	wl_list_for_each(w, &clients, link) {
-		if (w != c && w != p && w->isfullscreen && m == w->mon && (w->tags & c->tags))
+		if (w != c && w != p && w->isfullscreen && m == w->mon && (w->tags & c->tags)) {
 			setfullscreen(w, 0);
+			/* setmon() focused w because focustop() prefers fullscreen clients */
+			focusclient(focustop(selmon), NULL, 1);
+		}
 	}
 }
 
@@ -3053,8 +3054,7 @@ tagmon(const Arg *arg)
 void
 tile(Monitor *m)
 {
-	unsigned int mw, my, ty;
-	int i, n = 0;
+	int i, n = 0, mw, my, ty;
 	Client *c;
 
 	wl_list_for_each(c, &clients, link)
