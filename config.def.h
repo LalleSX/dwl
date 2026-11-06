@@ -53,6 +53,7 @@ static const struct xkb_rule_names xkb_rules = {
 	/* example:
 	.options = "ctrl:nocaps",
 	*/
+	.layout = "dk",
 	.options = NULL,
 };
 
@@ -116,10 +117,16 @@ static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TA
 
 /* commands */
 static const char *termcmd[] = { "foot", NULL };
+static const char *loginshellcmd[] = { "env", "-u", "SHELL", "foot", "--login-shell", NULL };
+static const char *browsercmd[] = { "/bin/sh", "-c",
+	"browser=$(xdg-mime query default x-scheme-handler/https)"
+	" && [ -n \"$browser\" ] && exec gtk-launch \"$browser\"", NULL };
 static const char *menucmd[] = { "wmenu-run", NULL };
 
 static const Key keys[] = {
 	/* modifier                  key                  function          argument */
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_w,           spawn,            {.v = browsercmd} },
+	{ WLR_MODIFIER_LOGO,         XKB_KEY_Return,      spawn,            {.v = loginshellcmd} },
 	{ MODKEY,                    XKB_KEY_p,           spawn,            {.v = menucmd} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,      spawn,            {.v = termcmd} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
